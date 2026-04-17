@@ -1,0 +1,20 @@
+{
+  "name": "armis-appsec-mcp",
+  "owner": {
+    "name": "Armis Security"
+  },
+  "metadata": {
+    "description": "AI-powered security scanner — scans code, files, and diffs for vulnerabilities using MCP",
+    "version": "1.0.0",
+    "pluginRoot": ".."
+  },
+  "plugins": [
+    {
+      "name": "armis-appsec",
+      "description": "AI-powered security scanner that finds vulnerabilities in code, files, and diffs. Automatically scans before git commit, push, and PR creation.",
+      "source": "./",
+      "license": "Apache-2.0",
+      "category": "development"
+    }
+  ]
+}
