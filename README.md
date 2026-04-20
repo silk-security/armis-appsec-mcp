@@ -17,7 +17,7 @@ AI-powered security scanning for [Claude Code](https://claude.ai/code). Scans co
 In Claude Code:
 
 ```
-/plugin marketplace add silk-security/armis-appsec-mcp
+/plugin marketplace add ArmisSecurity/armis-appsec-mcp
 ```
 
 ### 2. Install the plugin
@@ -26,14 +26,21 @@ In Claude Code:
 /plugin install armis-appsec@armis-appsec-mcp
 ```
 
+This unpacks the plugin into a versioned directory under
+`~/.claude/plugins/cache/armis-appsec-mcp/armis-appsec/<version>/`.
+
 ### 3. Set credentials
 
+Run this in a shell **after** installing — it locates the unpacked plugin
+directory and writes `.env` into it:
+
 ```bash
-cat > ~/.claude/plugins/cache/armis-appsec-mcp/armis-appsec/latest/.env << 'EOF'
+PLUGIN_DIR="$(ls -dt ~/.claude/plugins/cache/armis-appsec-mcp/armis-appsec/*/ | head -1)"
+cat > "$PLUGIN_DIR/.env" << 'EOF'
 ARMIS_CLIENT_ID=<your-client-id>
 ARMIS_CLIENT_SECRET=<your-client-secret>
 EOF
-chmod 600 ~/.claude/plugins/cache/armis-appsec-mcp/armis-appsec/latest/.env
+chmod 600 "$PLUGIN_DIR/.env"
 ```
 
 Contact the Armis AppSec team if you don't have credentials.
