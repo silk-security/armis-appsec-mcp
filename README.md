@@ -35,7 +35,7 @@ Run this in a shell **after** installing — it locates the unpacked plugin
 directory and writes `.env` into it:
 
 ```bash
-PLUGIN_DIR="$(ls -d ~/.claude/plugins/cache/armis-appsec-mcp/armis-appsec/*/ | head -1)"
+PLUGIN_DIR="$(ls -dt ~/.claude/plugins/cache/armis-appsec-mcp/armis-appsec/*/ | head -1)"
 cat > "$PLUGIN_DIR/.env" << 'EOF'
 ARMIS_CLIENT_ID=<your-client-id>
 ARMIS_CLIENT_SECRET=<your-client-secret>
