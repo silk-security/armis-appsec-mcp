@@ -1,0 +1,9 @@
+{
+  "scanner": {
+    "command": "${CLAUDE_PLUGIN_ROOT}/run.sh",
+    "env": {
+      "APPSEC_ENV": "${APPSEC_ENV:-prod}",
+      "FASTMCP_LOG_LEVEL": "ERROR"
+    }
+  }
+}
