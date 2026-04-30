@@ -33,10 +33,11 @@ _env_file = os.path.join(_plugin_dir, ".env")
 if os.path.isfile(_env_file):
     load_dotenv(_env_file, override=False)
 
-from auth import get_auth_status, init_auth
-from hash_utils import compute_staged_hash
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+
+from auth import get_auth_status, init_auth
+from hash_utils import compute_staged_hash
 from scanner_core import (
     APPSEC_API_URL,
     call_appsec_api,
@@ -81,9 +82,7 @@ async def _run_scan(
 
     # Warn on suppressed CRITICAL findings
     if suppressed:
-        suppressed_critical = [
-            f for f in suppressed if f.get("severity", "").upper() == "CRITICAL"
-        ]
+        suppressed_critical = [f for f in suppressed if f.get("severity", "").upper() == "CRITICAL"]
         if suppressed_critical:
             msg = _format_critical_warning(suppressed_critical)
             logger.warning(msg)
@@ -158,7 +157,7 @@ def _get_allowed_roots() -> list[str]:
         # Include /tmp, macOS /private/tmp, and the system temp directory
         # (on macOS, tempfile.gettempdir() returns /var/folders/... -> /private/var/folders/...)
         sys_tmp = os.path.realpath(tempfile.gettempdir())
-        roots = {home, "/tmp", "/private/tmp", sys_tmp}
+        roots = {home, "/tmp", "/private/tmp", sys_tmp}  # noqa: S108
         _ALLOWED_ROOTS.extend(sorted(roots))
     return _ALLOWED_ROOTS
 
@@ -170,9 +169,7 @@ def _validate_file_path(file_path: str) -> str:
     # Allowlist: path must be under HOME, /tmp, or /private/tmp
     allowed = _get_allowed_roots()
     if not any(resolved == root or resolved.startswith(root + "/") for root in allowed):
-        raise ToolError(
-            f"Path '{file_path}' is outside allowed directories (home, /tmp)."
-        )
+        raise ToolError(f"Path '{file_path}' is outside allowed directories (home, /tmp).")
 
     # Blocklist (defense-in-depth): system paths
     for prefix in _BLOCKED_PREFIXES:
@@ -208,24 +205,22 @@ def read_and_validate_file(file_path: str) -> tuple[str, str]:
     try:
         file_size = os.path.getsize(resolved)
     except OSError as e:
-        raise ToolError(f"Cannot stat {file_path}: {e}")
+        raise ToolError(f"Cannot stat {file_path}: {e}") from e
     if file_size > _MAX_FILE_BYTES:
         raise ToolError(f"File too large ({file_size // 1024 // 1024}MB). Max: 10MB.")
 
     try:
         with open(resolved, "rb") as f:
             if b"\x00" in f.read(8192):
-                raise ToolError(
-                    f"File '{file_path}' appears to be binary -- skipping scan."
-                )
+                raise ToolError(f"File '{file_path}' appears to be binary -- skipping scan.")
         with open(resolved, encoding="utf-8", errors="replace") as f:
             code = f.read()
-    except PermissionError:
-        raise ToolError(f"Permission denied reading {file_path}")
+    except PermissionError as e:
+        raise ToolError(f"Permission denied reading {file_path}") from e
     except ToolError:
         raise
     except OSError as e:
-        raise ToolError(f"Cannot read {file_path}: {e}")
+        raise ToolError(f"Cannot read {file_path}: {e}") from e
 
     if not code.strip():
         raise ToolError(f"File '{file_path}' is empty -- nothing to scan.")
@@ -241,8 +236,7 @@ def run_git_diff(repo_path: str = "", ref: str = "", staged: bool = False) -> st
     """Run git diff and return the diff text. Raises ToolError on failure."""
     if ref and not _VALID_GIT_REF.match(ref):
         raise ToolError(
-            f"Invalid git ref: '{ref}'. "
-            "Use branch names, tags, SHAs, or relative refs like HEAD~3."
+            f"Invalid git ref: '{ref}'. Use branch names, tags, SHAs, or relative refs like HEAD~3."
         )
     if ref and ref.startswith("-"):
         raise ToolError("Git ref cannot start with '-'.")
@@ -264,13 +258,11 @@ def run_git_diff(repo_path: str = "", ref: str = "", staged: bool = False) -> st
     logger.info("Running: %s in %s", " ".join(cmd), cwd)
 
     try:
-        result = subprocess.run(
-            cmd, cwd=cwd, capture_output=True, text=True, timeout=30
-        )
-    except subprocess.TimeoutExpired:
+        result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired as e:
         raise ToolError(
             "git diff timed out after 30 seconds. Try a narrower ref or smaller repo."
-        )
+        ) from e
 
     if result.returncode != 0:
         raise ToolError(f"git diff failed: {result.stderr.strip()}")
@@ -397,11 +389,7 @@ async def scan_diff(
     if not diff_text:
         return "No changes to scan."
 
-    label = (
-        f"diff against {ref}"
-        if ref
-        else ("staged changes" if staged else "unstaged changes")
-    )
+    label = f"diff against {ref}" if ref else ("staged changes" if staged else "unstaged changes")
     if ctx:
         await ctx.info(f"Scanning {label} ({len(diff_text)} chars)")
     logger.info("Scanning %s (%d chars)", label, len(diff_text))
@@ -474,9 +462,7 @@ def do_approve_findings(reason: str) -> str:
     ]
     # Suppressed CRITICAL findings also require approval
     suppressed_critical = [
-        f
-        for f in _last_scan.get("suppressed", [])
-        if f.get("severity", "").upper() == "CRITICAL"
+        f for f in _last_scan.get("suppressed", []) if f.get("severity", "").upper() == "CRITICAL"
     ]
     all_requiring_approval = high_critical + suppressed_critical
     if not all_requiring_approval:
@@ -569,9 +555,7 @@ def _cache_scan(
     # Design: suppressed CRITICAL blocks .scan-pass (requires approve_findings).
     # Suppressed HIGH does NOT block — .armisignore is a deliberate team decision
     # to accept HIGH-severity findings, so no per-commit approval is needed.
-    has_critical = any(
-        f.get("severity", "").upper() in ("CRITICAL", "HIGH") for f in findings
-    )
+    has_critical = any(f.get("severity", "").upper() in ("CRITICAL", "HIGH") for f in findings)
     has_suppressed_critical = any(
         f.get("severity", "").upper() == "CRITICAL" for f in (suppressed or [])
     )
@@ -615,8 +599,6 @@ if __name__ == "__main__":
     try:
         init_auth(APPSEC_API_URL)
     except RuntimeError as e:
-        logger.warning(
-            "Auth not configured: %s — scans will fail until credentials are set.", e
-        )
+        logger.warning("Auth not configured: %s — scans will fail until credentials are set.", e)
     transport = os.environ.get("APPSEC_TRANSPORT", "stdio")
-    mcp.run(transport=transport)
+    mcp.run(transport=transport)  # type: ignore[arg-type]

@@ -4,8 +4,6 @@ import os
 import sys
 from unittest.mock import patch
 
-import pytest
-
 _plugin_dir = os.path.join(os.path.dirname(__file__), "..", "..")
 if _plugin_dir not in sys.path:
     sys.path.insert(0, _plugin_dir)

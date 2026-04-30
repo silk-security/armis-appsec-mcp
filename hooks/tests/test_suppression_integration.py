@@ -73,9 +73,7 @@ class TestRunScanSuppression:
         config = ArmisIgnoreConfig(cwes=[798])
 
         with patch("server.call_appsec_api", return_value=raw_response):
-            report = await server._run_scan(
-                "code", "app.py", config=config
-            )
+            report = await server._run_scan("code", "app.py", config=config)
 
         assert "SQL injection" in report
         assert "hardcoded secret" not in report
@@ -84,7 +82,10 @@ class TestRunScanSuppression:
     @pytest.mark.asyncio
     async def test_no_config_loads_from_git(self):
         """_run_scan with config=None loads .armisignore from git root."""
-        raw_response = '```json\n[{"cwe": 89, "severity": "HIGH", "line": 1, "explanation": "SQLi", "has_secret": false}]\n```'
+        raw_response = (
+            '```json\n[{"cwe": 89, "severity": "HIGH", "line": 1,'
+            ' "explanation": "SQLi", "has_secret": false}]\n```'
+        )
 
         with patch("server.call_appsec_api", return_value=raw_response):
             with patch("server.find_git_root", return_value=None):
@@ -104,9 +105,7 @@ class TestRunScanSuppression:
 
         with patch("server.call_appsec_api", return_value=raw_response):
             with patch("server.logger") as mock_logger:
-                report = await server._run_scan(
-                    "code", "app.py", config=config
-                )
+                await server._run_scan("code", "app.py", config=config)
 
         mock_logger.warning.assert_called_once()
         assert "CRITICAL" in mock_logger.warning.call_args[0][0]

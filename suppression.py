@@ -174,7 +174,11 @@ def apply_suppressions(
         {"total": N, "active": X, "suppressed": Y, "by_directive": {"cwe:798": 2, ...}}
     """
     if not findings or _is_empty_config(config):
-        return findings, [], {"total": len(findings), "active": len(findings), "suppressed": 0, "by_directive": {}}
+        return (
+            findings,
+            [],
+            {"total": len(findings), "active": len(findings), "suppressed": 0, "by_directive": {}},
+        )
 
     active = []
     suppressed = []
@@ -198,5 +202,5 @@ def apply_suppressions(
 
 
 def _is_empty_config(config: ArmisIgnoreConfig) -> bool:
-    """Check if a config has no finding-level directives (file_patterns and rule_ids are irrelevant here)."""
+    """Check if config has no finding-level directives (file_patterns/rule_ids irrelevant)."""
     return not (config.cwes or config.severities or config.categories)

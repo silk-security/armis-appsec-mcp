@@ -14,6 +14,7 @@ import re
 import urllib.parse
 
 import httpx
+
 from auth import get_auth_header
 
 logger = logging.getLogger("appsec-mcp")
@@ -33,9 +34,7 @@ _API_URLS = {
     "prod": "https://moose.armis.com/api/v1",
 }
 _APPSEC_ENV = os.environ.get("APPSEC_ENV", "prod")
-APPSEC_API_URL = os.environ.get(
-    "APPSEC_API_URL", _API_URLS.get(_APPSEC_ENV, _API_URLS["prod"])
-)
+APPSEC_API_URL = os.environ.get("APPSEC_API_URL", _API_URLS.get(_APPSEC_ENV, _API_URLS["prod"]))
 
 SCAN_MODE = "fast"
 
@@ -92,14 +91,10 @@ def format_findings(
     if not findings and not suppressed_count:
         return f"SCAN {filename}: clean, no findings."
     if not findings and suppressed_count:
-        return (
-            f"SCAN {filename}: 0 finding(s) ({suppressed_count} suppressed by .armisignore)"
-        )
+        return f"SCAN {filename}: 0 finding(s) ({suppressed_count} suppressed by .armisignore)"
 
     severity_rank = {s: i for i, s in enumerate(SEVERITY_ORDER)}
-    findings = sorted(
-        findings, key=lambda f: severity_rank.get(f.get("severity", "").upper(), 99)
-    )
+    findings = sorted(findings, key=lambda f: severity_rank.get(f.get("severity", "").upper(), 99))
 
     # Header with suppression info when applicable
     if suppressed_count:
@@ -114,14 +109,12 @@ def format_findings(
     for i, f in enumerate(findings):
         severity = f.get("severity", "unknown").upper()
         cwe = f.get("cwe", "?")
-        cwe_name = f.get("cwe_name", "")
-        confidence = f.get("confidence", 0)
         line_num = f.get("line", "?")
         explanation = f.get("explanation", "")
         has_secret = f.get("has_secret", False)
         tainted = f.get("tainted_function_references", [])
 
-        parts = [f"[{i+1}] {severity} CWE-{cwe} L{line_num}: {explanation}"]
+        parts = [f"[{i + 1}] {severity} CWE-{cwe} L{line_num}: {explanation}"]
         if has_secret:
             parts[0] += " [SECRET]"
         if tainted:
@@ -133,9 +126,7 @@ def format_findings(
     if suppressed_count:
         by_directive = (suppression_summary or {}).get("by_directive", {})
         directive_parts = [f"{count} by {d}" for d, count in by_directive.items()]
-        lines.append(
-            f"[{suppressed_count} finding(s) suppressed: {', '.join(directive_parts)}]"
-        )
+        lines.append(f"[{suppressed_count} finding(s) suppressed: {', '.join(directive_parts)}]")
 
     return "\n".join(lines)
 

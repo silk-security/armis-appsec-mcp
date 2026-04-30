@@ -22,9 +22,7 @@ def _make_jwt(exp: float = None, extra_claims: dict = None) -> str:
     """Build a fake JWT with the given exp claim (no real signature)."""
     if exp is None:
         exp = time.time() + 3600  # 1 hour from now
-    header = base64.urlsafe_b64encode(json.dumps({"alg": "HS256"}).encode()).rstrip(
-        b"="
-    )
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "HS256"}).encode()).rstrip(b"=")
     claims = {"exp": exp, "sub": "test"}
     if extra_claims:
         claims.update(extra_claims)

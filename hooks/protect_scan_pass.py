@@ -26,7 +26,6 @@ def main():
 
     # Fail-open: wrap all logic so our bugs never block the developer.
     try:
-
         tool_input = hook_input.get("tool_input", {})
         if not isinstance(tool_input, dict):
             tool_input = {}

@@ -1,4 +1,4 @@
-"""Tests for server.py extracted helpers — read_and_validate_file, run_git_diff, get_debug_config."""
+"""Tests for server.py helpers: read_and_validate_file, run_git_diff, get_debug_config."""
 
 import os
 import subprocess
@@ -152,9 +152,7 @@ class TestRunGitDiff:
             cwd=str(tmp_path),
             capture_output=True,
         )
-        subprocess.run(
-            ["git", "rm", "to_delete.py"], cwd=str(tmp_path), capture_output=True
-        )
+        subprocess.run(["git", "rm", "to_delete.py"], cwd=str(tmp_path), capture_output=True)
         result = server.run_git_diff(repo_path=str(tmp_path), staged=True)
         assert "to_delete.py" not in result
         assert "SECRET" not in result
@@ -182,21 +180,15 @@ class TestRunGitDiff:
         )
         # Modify keep.py and delete remove.py
         (tmp_path / "keep.py").write_text("x = 42\n")
-        subprocess.run(
-            ["git", "rm", "remove.py"], cwd=str(tmp_path), capture_output=True
-        )
-        subprocess.run(
-            ["git", "add", "keep.py"], cwd=str(tmp_path), capture_output=True
-        )
+        subprocess.run(["git", "rm", "remove.py"], cwd=str(tmp_path), capture_output=True)
+        subprocess.run(["git", "add", "keep.py"], cwd=str(tmp_path), capture_output=True)
         result = server.run_git_diff(repo_path=str(tmp_path), staged=True)
         assert "keep.py" in result
         assert "x = 42" in result
         assert "remove.py" not in result
 
     def test_timeout(self):
-        with patch(
-            "server.subprocess.run", side_effect=subprocess.TimeoutExpired("git", 30)
-        ):
+        with patch("server.subprocess.run", side_effect=subprocess.TimeoutExpired("git", 30)):
             with pytest.raises(Exception, match="timed out"):
                 server.run_git_diff()
 
@@ -265,7 +257,7 @@ class TestComputeStagedHash:
         mock_result.stdout = "diff content here"
         with patch("hash_utils.subprocess.run", return_value=mock_result):
             result = compute_staged_hash()
-            expected = hashlib.sha256("diff content here".encode()).hexdigest()
+            expected = hashlib.sha256(b"diff content here").hexdigest()
             assert result == expected
 
 

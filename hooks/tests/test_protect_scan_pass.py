@@ -5,8 +5,6 @@ import os
 import subprocess
 import sys
 
-import pytest
-
 HOOK_PATH = os.path.join(os.path.dirname(__file__), "..", "protect_scan_pass.py")
 
 
