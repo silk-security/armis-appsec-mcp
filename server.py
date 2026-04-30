@@ -43,6 +43,13 @@ from scanner_core import (
     format_findings,
     parse_findings,
 )
+from suppression import (
+    ArmisIgnoreConfig,
+    apply_suppressions,
+    find_git_root,
+    is_path_excluded,
+    load_armisignore,
+)
 
 logger = logging.getLogger("appsec-mcp")
 
@@ -53,8 +60,9 @@ async def _run_scan(
     ctx: Context | None = None,
     is_staged_scan: bool = False,
     scan_hash: str = "",
+    config: ArmisIgnoreConfig | None = None,
 ) -> str:
-    """Shared scan pipeline: call API, parse, format, cache, report progress."""
+    """Shared scan pipeline: call API, parse, suppress, format, cache, report progress."""
     t0 = time.monotonic()
     try:
         raw = await asyncio.to_thread(call_appsec_api, code)
@@ -64,20 +72,49 @@ async def _run_scan(
         raise ToolError(f"Scan failed: {e}") from e
 
     findings = parse_findings(raw)
-    report = format_findings(findings, filename)
+
+    # Apply .armisignore suppression
+    if config is None:
+        git_root = find_git_root()
+        config = load_armisignore(git_root)
+    active, suppressed, suppression_summary = apply_suppressions(findings, config)
+
+    # Warn on suppressed CRITICAL findings
+    if suppressed:
+        suppressed_critical = [
+            f for f in suppressed if f.get("severity", "").upper() == "CRITICAL"
+        ]
+        if suppressed_critical:
+            msg = _format_critical_warning(suppressed_critical)
+            logger.warning(msg)
+            if ctx:
+                await ctx.info(msg)
+
+    report = format_findings(active, filename, suppression_summary=suppression_summary)
     _cache_scan(
         report,
-        findings,
+        active,
         filename,
         is_staged_scan=is_staged_scan,
         scan_hash=scan_hash,
+        suppressed=suppressed,
+        suppression_summary=suppression_summary,
     )
 
     if ctx:
         elapsed = time.monotonic() - t0
-        await ctx.info(f"Scan complete: {len(findings)} finding(s) in {elapsed:.1f}s")
+        await ctx.info(f"Scan complete: {len(active)} finding(s) in {elapsed:.1f}s")
 
     return report
+
+
+def _format_critical_warning(suppressed_critical: list[dict]) -> str:
+    """Format a warning message for suppressed CRITICAL findings."""
+    cwes = [f"CWE-{f.get('cwe', '?')}" for f in suppressed_critical]
+    return (
+        f"WARNING: {len(suppressed_critical)} CRITICAL finding(s) suppressed by "
+        f".armisignore ({', '.join(cwes)}). approve_findings is still required."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -316,13 +353,22 @@ async def scan_file(
     Returns:
         A formatted report of any vulnerabilities found.
     """
+    resolved = _validate_file_path(file_path)
+
+    # Load .armisignore and check path exclusion before reading file or calling API
+    git_root = find_git_root(from_path=resolved)
+    config = load_armisignore(git_root)
+    if git_root and is_path_excluded(resolved, config, git_root):
+        logger.info("scan_file: %s excluded by .armisignore", file_path)
+        return f"SCAN {os.path.basename(file_path)}: skipped (excluded by .armisignore)"
+
     code, filename = read_and_validate_file(file_path)
 
     if ctx:
         await ctx.info(f"Scanning {filename} ({len(code)} chars)")
     logger.info(f"Scanning file: {file_path} ({len(code)} chars)")
 
-    return await _run_scan(code, filename, ctx)
+    return await _run_scan(code, filename, ctx, config=config)
 
 
 @mcp.tool()
@@ -396,6 +442,8 @@ async def debug_config() -> str:
 _last_scan: dict = {
     "report": "",
     "findings": [],
+    "suppressed": [],
+    "suppression_summary": {},
     "filename": "",
     "timestamp": None,
     "is_staged_scan": False,
@@ -424,7 +472,14 @@ def do_approve_findings(reason: str) -> str:
         for f in _last_scan.get("findings", [])
         if f.get("severity", "").upper() in ("CRITICAL", "HIGH")
     ]
-    if not high_critical:
+    # Suppressed CRITICAL findings also require approval
+    suppressed_critical = [
+        f
+        for f in _last_scan.get("suppressed", [])
+        if f.get("severity", "").upper() == "CRITICAL"
+    ]
+    all_requiring_approval = high_critical + suppressed_critical
+    if not all_requiring_approval:
         return "ERROR: No HIGH/CRITICAL findings to approve. Run scan_diff first."
 
     if not reason.strip():
@@ -442,17 +497,17 @@ def do_approve_findings(reason: str) -> str:
     except OSError as e:
         return f"ERROR: Could not write .scan-pass: {e}"
 
-    severities = [f.get("severity", "UNKNOWN") for f in high_critical]
+    severities = [f.get("severity", "UNKNOWN") for f in all_requiring_approval]
     logger.warning(
         "approve_findings: reason=%r, findings=%d, severities=%s, staged_hash=%s",
         reason,
-        len(high_critical),
+        len(all_requiring_approval),
         severities,
         approval_hash[:12],
     )
 
     return (
-        f"Approved {len(high_critical)} HIGH/CRITICAL findings. "
+        f"Approved {len(all_requiring_approval)} HIGH/CRITICAL findings. "
         f"Reason: {reason}. "
         f".scan-pass written. You may now retry the commit."
     )
@@ -479,6 +534,8 @@ def _cache_scan(
     filename: str,
     is_staged_scan: bool = False,
     scan_hash: str = "",
+    suppressed: list[dict] | None = None,
+    suppression_summary: dict | None = None,
 ):
     """Update the last scan cache and write .scan-pass if clean.
 
@@ -489,11 +546,15 @@ def _cache_scan(
         scan_hash: Pre-computed hash for the .scan-pass file. For staged scans
             this is the staged diff hash; for ref scans it's a hash of the diff text.
             Falls back to compute_staged_hash() if empty.
+        suppressed: Findings suppressed by .armisignore directives.
+        suppression_summary: Stats about suppressions applied.
     """
     _last_scan.update(
         {
             "report": report,
             "findings": findings,
+            "suppressed": suppressed or [],
+            "suppression_summary": suppression_summary or {},
             "filename": filename,
             "timestamp": time.time(),
             "is_staged_scan": is_staged_scan,
@@ -505,12 +566,18 @@ def _cache_scan(
         return
 
     # Write/remove .scan-pass for the PreToolUse hook
+    # Design: suppressed CRITICAL blocks .scan-pass (requires approve_findings).
+    # Suppressed HIGH does NOT block — .armisignore is a deliberate team decision
+    # to accept HIGH-severity findings, so no per-commit approval is needed.
     has_critical = any(
         f.get("severity", "").upper() in ("CRITICAL", "HIGH") for f in findings
     )
+    has_suppressed_critical = any(
+        f.get("severity", "").upper() == "CRITICAL" for f in (suppressed or [])
+    )
     scan_pass_path = _scan_pass_path()
     try:
-        if not has_critical:
+        if not has_critical and not has_suppressed_critical:
             effective_hash = scan_hash or compute_staged_hash()
             if effective_hash:
                 with open(scan_pass_path, "w") as f:
