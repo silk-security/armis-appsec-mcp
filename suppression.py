@@ -104,11 +104,54 @@ def _parse_armisignore_lines(lines: list[str]) -> ArmisIgnoreConfig:
     return config
 
 
+def _fnmatch_gitignore(path: str, pattern: str) -> bool:
+    """Match path against pattern using .gitignore-style semantics.
+
+    Unlike fnmatch.fnmatch, '*' does NOT cross '/' boundaries.
+    '**' matches zero or more path segments (like .gitignore).
+    """
+    path_parts = path.split("/")
+    pattern_parts = pattern.split("/")
+    return _match_parts(path_parts, pattern_parts)
+
+
+def _match_parts(path_parts: list[str], pattern_parts: list[str]) -> bool:
+    """Recursively match path segments against pattern segments."""
+    pi = 0  # path index
+    pa = 0  # pattern index
+
+    while pa < len(pattern_parts):
+        if pi >= len(path_parts):
+            # Remaining pattern segments must all be ** to match
+            if all(p == "**" for p in pattern_parts[pa:]):
+                return True
+            return False
+
+        if pattern_parts[pa] == "**":
+            # ** matches zero or more path segments
+            if pa == len(pattern_parts) - 1:
+                return True
+            # Try matching remaining pattern against each suffix of path
+            for i in range(pi, len(path_parts)):
+                if _match_parts(path_parts[i:], pattern_parts[pa + 1 :]):
+                    return True
+            return False
+
+        # Single segment: use fnmatch but only within this segment (no / possible)
+        if not fnmatch.fnmatch(path_parts[pi], pattern_parts[pa]):
+            return False
+
+        pi += 1
+        pa += 1
+
+    return pi == len(path_parts)
+
+
 def is_path_excluded(file_path: str, config: ArmisIgnoreConfig, git_root: str) -> bool:
     """Check if a file path matches any exclusion pattern in the config.
 
-    Trailing-slash patterns (e.g. "vendor/") match any path starting with that prefix.
-    Other patterns use fnmatch against the path relative to git root.
+    Uses .gitignore-style semantics: '*' does not cross '/', '**' matches
+    zero or more directories. Trailing-slash patterns match directory prefixes.
     """
     if not config.file_patterns:
         return False
@@ -125,7 +168,7 @@ def is_path_excluded(file_path: str, config: ArmisIgnoreConfig, git_root: str) -
                 return True
         elif "/" in pattern:
             # Pattern contains path separator — match against full relative path
-            if fnmatch.fnmatch(rel_path, pattern):
+            if _fnmatch_gitignore(rel_path, pattern):
                 return True
         else:
             # No path separator — match against basename (like .gitignore)

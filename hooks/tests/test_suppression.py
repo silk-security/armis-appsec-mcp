@@ -274,11 +274,23 @@ class TestIsPathExcluded:
     def test_pattern_with_slash_matches_relative_path(self, tmp_path):
         config = ArmisIgnoreConfig(file_patterns=["src/*.js"])
         git_root = str(tmp_path)
-        # Matches files under src/
+        # Matches files directly under src/
         assert is_path_excluded(str(tmp_path / "src" / "app.js"), config, git_root) is True
-        # Also matches deeper (Python fnmatch * crosses / unlike shell glob)
-        assert is_path_excluded(str(tmp_path / "src" / "sub" / "app.js"), config, git_root) is True
+        # Does NOT cross / — .gitignore semantics, * only matches within one segment
+        assert is_path_excluded(str(tmp_path / "src" / "sub" / "app.js"), config, git_root) is False
         # Does NOT match files outside src/
+        assert is_path_excluded(str(tmp_path / "lib" / "app.js"), config, git_root) is False
+
+    def test_double_star_matches_across_directories(self, tmp_path):
+        config = ArmisIgnoreConfig(file_patterns=["src/**/*.js"])
+        git_root = str(tmp_path)
+        # ** crosses directory boundaries
+        assert is_path_excluded(str(tmp_path / "src" / "app.js"), config, git_root) is True
+        assert is_path_excluded(str(tmp_path / "src" / "sub" / "app.js"), config, git_root) is True
+        assert (
+            is_path_excluded(str(tmp_path / "src" / "a" / "b" / "c.js"), config, git_root) is True
+        )
+        # Does NOT match outside src/
         assert is_path_excluded(str(tmp_path / "lib" / "app.js"), config, git_root) is False
 
 
