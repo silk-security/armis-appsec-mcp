@@ -186,7 +186,15 @@ def _derive_category(finding: dict) -> str:
 def _finding_matches_config(finding: dict, config: ArmisIgnoreConfig) -> str | None:
     """Check if a finding matches any directive in config (OR logic).
 
-    Returns the matching directive string, or None if no match.
+    Returns the first matching directive string, or None if no match.
+
+    Priority order (first match wins for attribution):
+      1. CWE   — most specific (e.g., "cwe:798")
+      2. Severity — medium specificity (e.g., "severity:LOW")
+      3. Category — broadest (e.g., "category:secrets")
+
+    A finding matching multiple directives is suppressed regardless of which
+    is returned; the return value only affects the by_directive summary.
     rule: directives are silently skipped (fast-scan model has no rule ID).
     """
     # CWE match
@@ -242,6 +250,59 @@ def apply_suppressions(
         "by_directive": by_directive,
     }
     return active, suppressed, summary
+
+
+def filter_diff_excluded_paths(diff_text: str, config: ArmisIgnoreConfig, git_root: str) -> str:
+    """Remove diff sections for files excluded by .armisignore path patterns.
+
+    Splits unified diff on 'diff --git' boundaries, checks each file path
+    against is_path_excluded(), and returns the rejoined diff without excluded
+    sections. Preamble text before the first header is preserved.
+    """
+    if not config.file_patterns or not diff_text:
+        return diff_text
+
+    sections = diff_text.split("diff --git ")
+    # sections[0] is preamble (empty or text before first diff header)
+    preamble = sections[0]
+    kept: list[str] = []
+
+    for section in sections[1:]:
+        path = _extract_diff_path(section)
+        if path and is_path_excluded(os.path.join(git_root, path), config, git_root):
+            logger.info("filter_diff_excluded_paths: excluding %s", path)
+            continue
+        kept.append(section)
+
+    if not kept:
+        return ""
+
+    result = preamble + "diff --git ".join([""] + kept)
+    return result
+
+
+def _extract_diff_path(section: str) -> str | None:
+    """Extract the b/ file path from a diff section header.
+
+    Handles both 'a/path b/path' and quoted forms like 'a/"path" b/"path"'.
+    For renames, uses the b/ (destination) path.
+    """
+    first_line = section.split("\n", 1)[0]
+    # The header line after 'diff --git ' is: a/old b/new
+    # Find the b/ path — it's the last space-separated token starting with b/
+    # Handle quoted paths: "b/path with spaces"
+    if ' b/"' in first_line:
+        start = first_line.index(' b/"') + 3
+        end = (
+            first_line.index('"', start + 1) + 1
+            if '"' in first_line[start + 1 :]
+            else len(first_line)
+        )
+        return first_line[start:end].strip('"')
+    elif " b/" in first_line:
+        b_idx = first_line.rindex(" b/")
+        return first_line[b_idx + 3 :]
+    return None
 
 
 def _is_empty_config(config: ArmisIgnoreConfig) -> bool:

@@ -47,6 +47,7 @@ from scanner_core import (
 from suppression import (
     ArmisIgnoreConfig,
     apply_suppressions,
+    filter_diff_excluded_paths,
     find_git_root,
     is_path_excluded,
     load_armisignore,
@@ -404,12 +405,29 @@ async def scan_diff(
         elif diff_text:
             scan_hash = hashlib.sha256(diff_text.encode()).hexdigest()
 
+    # Load .armisignore and filter excluded paths before API call
+    git_root = find_git_root(from_path=repo_path or None)
+    config = load_armisignore(git_root)
+    if git_root and config.file_patterns:
+        diff_text = filter_diff_excluded_paths(diff_text, config, git_root)
+        if not diff_text.strip():
+            report = f"SCAN {label}: all changed files excluded by .armisignore"
+            _cache_scan(
+                report,
+                [],
+                label,
+                is_staged_scan=is_shipping_scan,
+                scan_hash=scan_hash,
+            )
+            return report
+
     return await _run_scan(
         diff_text,
         label,
         ctx,
         is_staged_scan=is_shipping_scan,
         scan_hash=scan_hash,
+        config=config,
     )
 
 

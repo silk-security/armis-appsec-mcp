@@ -34,7 +34,7 @@ if "server" in sys.modules:
     importlib.reload(sys.modules["server"])
 import server
 from scanner_core import format_findings
-from suppression import ArmisIgnoreConfig
+from suppression import ArmisIgnoreConfig, filter_diff_excluded_paths
 
 
 @pytest.fixture(autouse=True)
@@ -226,6 +226,91 @@ class TestApproveFindingsSuppressedCritical:
         )
         result = server.do_approve_findings("reason")
         assert "ERROR" in result
+
+
+# ---------------------------------------------------------------------------
+# Category E: scan_diff path exclusion (tests the wiring logic via helpers)
+# ---------------------------------------------------------------------------
+class TestScanDiffPathExclusion:
+    def test_all_excluded_writes_scan_pass(self, tmp_path, monkeypatch):
+        """When filter_diff_excluded_paths removes all files, _cache_scan writes .scan-pass."""
+        monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path))
+        diff_text = (
+            "diff --git a/vendor/lib.js b/vendor/lib.js\n"
+            "index 1234..5678 100644\n"
+            "--- a/vendor/lib.js\n"
+            "+++ b/vendor/lib.js\n"
+            "@@ -1 +1 @@\n"
+            "+vendored code\n"
+        )
+        config = ArmisIgnoreConfig(file_patterns=["vendor/"])
+
+        # Simulate scan_diff's logic: filter → all excluded → _cache_scan
+        filtered = filter_diff_excluded_paths(diff_text, config, str(tmp_path))
+        assert filtered.strip() == ""
+
+        label = "staged changes"
+        scan_hash = "abc123staged"
+        report = f"SCAN {label}: all changed files excluded by .armisignore"
+        server._cache_scan(report, [], label, is_staged_scan=True, scan_hash=scan_hash)
+
+        scan_pass = tmp_path / ".scan-pass"
+        assert scan_pass.exists()
+        assert scan_pass.read_text() == scan_hash
+
+    def test_partial_exclusion_filters_diff(self, tmp_path):
+        """filter_diff_excluded_paths removes excluded files, keeps the rest."""
+        diff_text = (
+            "diff --git a/vendor/lib.js b/vendor/lib.js\n"
+            "--- a/vendor/lib.js\n"
+            "+++ b/vendor/lib.js\n"
+            "@@ -1 +1 @@\n"
+            "+vendored\n"
+            "diff --git a/src/app.py b/src/app.py\n"
+            "--- a/src/app.py\n"
+            "+++ b/src/app.py\n"
+            "@@ -1 +1 @@\n"
+            "+import os\n"
+        )
+        config = ArmisIgnoreConfig(file_patterns=["vendor/"])
+        filtered = filter_diff_excluded_paths(diff_text, config, str(tmp_path))
+
+        assert "vendor/lib.js" not in filtered
+        assert "src/app.py" in filtered
+
+    @pytest.mark.asyncio
+    async def test_partial_exclusion_sends_filtered_to_api(self, tmp_path, monkeypatch):
+        """_run_scan receives only the filtered diff content."""
+        monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path))
+        diff_text = (
+            "diff --git a/vendor/lib.js b/vendor/lib.js\n"
+            "--- a/vendor/lib.js\n"
+            "+++ b/vendor/lib.js\n"
+            "@@ -1 +1 @@\n"
+            "+vendored\n"
+            "diff --git a/src/app.py b/src/app.py\n"
+            "--- a/src/app.py\n"
+            "+++ b/src/app.py\n"
+            "@@ -1 +1 @@\n"
+            "+import os\n"
+        )
+        config = ArmisIgnoreConfig(file_patterns=["vendor/"])
+        filtered = filter_diff_excluded_paths(diff_text, config, str(tmp_path))
+        raw_response = "```json\n[]\n```"
+
+        with patch("server.call_appsec_api", return_value=raw_response) as mock_api:
+            await server._run_scan(filtered, "staged changes", config=config)
+
+        called_code = mock_api.call_args[0][0]
+        assert "vendor/lib.js" not in called_code
+        assert "src/app.py" in called_code
+
+    def test_no_patterns_returns_unchanged(self, tmp_path):
+        """No file_patterns in config → filter_diff_excluded_paths returns unchanged."""
+        diff_text = "diff --git a/vendor/lib.js b/vendor/lib.js\n+++ b/vendor/lib.js\n+code\n"
+        config = ArmisIgnoreConfig(cwes=[798])
+        filtered = filter_diff_excluded_paths(diff_text, config, str(tmp_path))
+        assert filtered == diff_text
 
 
 # ---------------------------------------------------------------------------

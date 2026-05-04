@@ -14,6 +14,7 @@ from suppression import (
     _finding_matches_config,
     _parse_armisignore_lines,
     apply_suppressions,
+    filter_diff_excluded_paths,
     find_git_root,
     is_path_excluded,
     load_armisignore,
@@ -346,3 +347,124 @@ class TestLoadArmisignore:
         armisignore.write_bytes(b"\xef\xbb\xbfcwe:798\n")
         config = load_armisignore(str(tmp_path))
         assert config.cwes == [798]
+
+
+# ---------------------------------------------------------------------------
+# Category E: filter_diff_excluded_paths
+# ---------------------------------------------------------------------------
+class TestFilterDiffExcludedPaths:
+    def test_empty_diff_returns_empty(self, tmp_path):
+        config = ArmisIgnoreConfig(file_patterns=["vendor/"])
+        assert filter_diff_excluded_paths("", config, str(tmp_path)) == ""
+
+    def test_single_file_excluded(self, tmp_path):
+        config = ArmisIgnoreConfig(file_patterns=["vendor/"])
+        diff = (
+            "diff --git a/vendor/lib.js b/vendor/lib.js\n"
+            "index 1234..5678 100644\n"
+            "--- a/vendor/lib.js\n"
+            "+++ b/vendor/lib.js\n"
+            "@@ -1,3 +1,4 @@\n"
+            "+console.log('hi');\n"
+        )
+        result = filter_diff_excluded_paths(diff, config, str(tmp_path))
+        assert result == ""
+
+    def test_single_file_not_excluded(self, tmp_path):
+        config = ArmisIgnoreConfig(file_patterns=["vendor/"])
+        diff = (
+            "diff --git a/src/app.js b/src/app.js\n"
+            "index 1234..5678 100644\n"
+            "--- a/src/app.js\n"
+            "+++ b/src/app.js\n"
+            "@@ -1,3 +1,4 @@\n"
+            "+console.log('hi');\n"
+        )
+        result = filter_diff_excluded_paths(diff, config, str(tmp_path))
+        assert "src/app.js" in result
+
+    def test_multiple_files_mixed(self, tmp_path):
+        config = ArmisIgnoreConfig(file_patterns=["vendor/"])
+        diff = (
+            "diff --git a/vendor/lib.js b/vendor/lib.js\n"
+            "index 1234..5678 100644\n"
+            "--- a/vendor/lib.js\n"
+            "+++ b/vendor/lib.js\n"
+            "@@ -1,3 +1,4 @@\n"
+            "+// vendored\n"
+            "diff --git a/src/app.js b/src/app.js\n"
+            "index abcd..efgh 100644\n"
+            "--- a/src/app.js\n"
+            "+++ b/src/app.js\n"
+            "@@ -1,3 +1,4 @@\n"
+            "+// app code\n"
+        )
+        result = filter_diff_excluded_paths(diff, config, str(tmp_path))
+        assert "vendor/lib.js" not in result
+        assert "src/app.js" in result
+
+    def test_directory_pattern_matches(self, tmp_path):
+        config = ArmisIgnoreConfig(file_patterns=["node_modules/"])
+        diff = (
+            "diff --git a/node_modules/pkg/index.js b/node_modules/pkg/index.js\n"
+            "index 1234..5678 100644\n"
+            "--- a/node_modules/pkg/index.js\n"
+            "+++ b/node_modules/pkg/index.js\n"
+            "@@ -1 +1 @@\n"
+            "+module.exports = {};\n"
+        )
+        result = filter_diff_excluded_paths(diff, config, str(tmp_path))
+        assert result == ""
+
+    def test_glob_pattern_matches(self, tmp_path):
+        config = ArmisIgnoreConfig(file_patterns=["*.min.js"])
+        diff = (
+            "diff --git a/dist/bundle.min.js b/dist/bundle.min.js\n"
+            "index 1234..5678 100644\n"
+            "--- a/dist/bundle.min.js\n"
+            "+++ b/dist/bundle.min.js\n"
+            "@@ -1 +1 @@\n"
+            "+var x=1;\n"
+        )
+        result = filter_diff_excluded_paths(diff, config, str(tmp_path))
+        assert result == ""
+
+    def test_no_file_patterns_returns_unchanged(self, tmp_path):
+        config = ArmisIgnoreConfig(cwes=[798])
+        diff = "diff --git a/src/app.js b/src/app.js\n+++ b/src/app.js\n+code\n"
+        result = filter_diff_excluded_paths(diff, config, str(tmp_path))
+        assert result == diff
+
+    def test_renamed_file_uses_b_path(self, tmp_path):
+        config = ArmisIgnoreConfig(file_patterns=["vendor/"])
+        diff = (
+            "diff --git a/src/old.js b/vendor/new.js\n"
+            "similarity index 90%\n"
+            "rename from src/old.js\n"
+            "rename to vendor/new.js\n"
+            "index 1234..5678 100644\n"
+            "--- a/src/old.js\n"
+            "+++ b/vendor/new.js\n"
+            "@@ -1 +1 @@\n"
+            "+moved\n"
+        )
+        result = filter_diff_excluded_paths(diff, config, str(tmp_path))
+        assert result == ""
+
+    def test_preamble_preserved(self, tmp_path):
+        config = ArmisIgnoreConfig(file_patterns=["vendor/"])
+        diff = "some preamble text\ndiff --git a/src/app.js b/src/app.js\n+++ b/src/app.js\n+code\n"
+        result = filter_diff_excluded_paths(diff, config, str(tmp_path))
+        assert result.startswith("some preamble text\n")
+        assert "src/app.js" in result
+
+    def test_quoted_path_with_spaces(self, tmp_path):
+        config = ArmisIgnoreConfig(file_patterns=["vendor/"])
+        diff = (
+            'diff --git a/"vendor/my lib.js" b/"vendor/my lib.js"\n'
+            "index 1234..5678 100644\n"
+            "+++ b/vendor/my lib.js\n"
+            "+code\n"
+        )
+        result = filter_diff_excluded_paths(diff, config, str(tmp_path))
+        assert result == ""
