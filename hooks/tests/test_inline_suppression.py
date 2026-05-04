@@ -1,7 +1,5 @@
 """Unit tests for inline armis:ignore comment suppression (ADR-0008 Category C + D)."""
 
-
-
 from suppression import (
     InlineDirective,
     _extract_comment_text,
