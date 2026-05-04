@@ -2,9 +2,7 @@
 
 import hashlib
 import json
-import os
 import subprocess
-import sys
 
 import pytest
 
@@ -147,9 +145,7 @@ class TestScanPass:
     def test_mismatched_hash_blocks_commit(self, run_hook, tmp_path):
         _init_git_repo(tmp_path)
         scan_pass = tmp_path / ".scan-pass"
-        scan_pass.write_text(
-            "0000000000000000000000000000000000000000000000000000000000000000"
-        )
+        scan_pass.write_text("0000000000000000000000000000000000000000000000000000000000000000")
 
         stdout, stderr, rc = run_hook("git commit -m 'msg'")
         assert rc == 2, "Mismatched hash should block commit"
@@ -196,9 +192,7 @@ class TestScanPass:
 
         # Stage additional file (changes the staged diff hash)
         (tmp_path / "new_file.py").write_text("import os\n")
-        subprocess.run(
-            ["git", "add", "new_file.py"], cwd=str(tmp_path), capture_output=True
-        )
+        subprocess.run(["git", "add", "new_file.py"], cwd=str(tmp_path), capture_output=True)
 
         stdout, stderr, rc = run_hook("git commit -m 'msg'")
         assert rc == 2, "New staged changes should invalidate .scan-pass"
@@ -362,9 +356,7 @@ class TestCWE73PluginRootValidation:
         scan_pass.write_text("any-content")
 
         # Set CLAUDE_PLUGIN_ROOT to subdir within repo
-        stdout, stderr, rc = run_hook(
-            "git push", env_override={"CLAUDE_PLUGIN_ROOT": str(subdir)}
-        )
+        stdout, stderr, rc = run_hook("git push", env_override={"CLAUDE_PLUGIN_ROOT": str(subdir)})
         assert rc == 0, "Valid path within repo should allow push"
 
     def test_plugin_root_at_repo_root_accepts(self, run_hook, tmp_path):
@@ -412,9 +404,7 @@ class TestCWE73PluginRootValidation:
         # Attempt path traversal (will be resolved by realpath)
         traversal = str(tmp_path / ".." / "escape")
 
-        stdout, stderr, rc = run_hook(
-            "git push", env_override={"CLAUDE_PLUGIN_ROOT": traversal}
-        )
+        stdout, stderr, rc = run_hook("git push", env_override={"CLAUDE_PLUGIN_ROOT": traversal})
         assert rc == 2, "Path traversal should be rejected"
 
     def test_plugin_root_symlink_escape_rejects(self, run_hook, tmp_path):
@@ -458,9 +448,7 @@ class TestCWE73PluginRootValidation:
         scan_pass = tmp_path / ".scan-pass"
         scan_pass.write_text("content")
 
-        stdout, stderr, rc = run_hook(
-            "git push", env_override={"CLAUDE_PLUGIN_ROOT": ""}
-        )
+        stdout, stderr, rc = run_hook("git push", env_override={"CLAUDE_PLUGIN_ROOT": ""})
         # Empty string causes fallback to hook script location, not tmp_path
         assert rc == 2, "Empty string uses script location, .scan-pass not found there"
 

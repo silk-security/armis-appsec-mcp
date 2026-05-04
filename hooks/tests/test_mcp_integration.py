@@ -46,9 +46,7 @@ import server
 
 # Clean and finding scan responses
 _CLEAN_FINDINGS: list[dict] = []
-_HIGH_FINDINGS = [
-    {"cwe": 89, "severity": "HIGH", "line": 10, "explanation": "SQL injection"}
-]
+_HIGH_FINDINGS = [{"cwe": 89, "severity": "HIGH", "line": 10, "explanation": "SQL injection"}]
 
 
 @pytest.fixture
@@ -100,9 +98,7 @@ class TestScanPassForgeryPrevention:
         """scan_code/scan_file path: is_staged_scan=False -> no .scan-pass."""
         server._cache_scan("clean report", _CLEAN_FINDINGS, "snippet.py")
         scan_pass = plugin_root / ".scan-pass"
-        assert (
-            not scan_pass.exists()
-        ), "_cache_scan with is_staged_scan=False wrote .scan-pass"
+        assert not scan_pass.exists(), "_cache_scan with is_staged_scan=False wrote .scan-pass"
 
     def test_cache_scan_with_staged_flag_writes(self, plugin_root, tmp_path):
         """scan_diff(staged=True) path: is_staged_scan=True -> writes .scan-pass."""
@@ -122,9 +118,7 @@ class TestScanPassForgeryPrevention:
             os.chdir(original_cwd)
 
         scan_pass = plugin_root / ".scan-pass"
-        assert (
-            scan_pass.exists()
-        ), "_cache_scan with is_staged_scan=True should write .scan-pass"
+        assert scan_pass.exists(), "_cache_scan with is_staged_scan=True should write .scan-pass"
         assert scan_pass.read_text().strip() == staged_hash
 
     def test_cache_scan_with_findings_removes_scan_pass(self, plugin_root, tmp_path):
@@ -145,9 +139,7 @@ class TestScanPassForgeryPrevention:
             os.chdir(original_cwd)
 
         scan_pass = plugin_root / ".scan-pass"
-        assert (
-            not scan_pass.exists()
-        ), ".scan-pass should be removed when HIGH findings are present"
+        assert not scan_pass.exists(), ".scan-pass should be removed when HIGH findings are present"
 
     def test_cache_scan_updates_last_scan_cache(self):
         """_cache_scan always updates the in-memory cache regardless of is_staged_scan."""
@@ -166,9 +158,7 @@ class TestScanPassForgeryPrevention:
         assert server._last_scan["timestamp"] is not None
         assert server._last_scan["is_staged_scan"] is False
 
-        server._cache_scan(
-            "staged report", _CLEAN_FINDINGS, "staged.py", is_staged_scan=True
-        )
+        server._cache_scan("staged report", _CLEAN_FINDINGS, "staged.py", is_staged_scan=True)
         assert server._last_scan["is_staged_scan"] is True
 
 
@@ -207,9 +197,7 @@ class TestGetDebugConfig:
 # ---------------------------------------------------------------------------
 # approve_findings escape hatch
 # ---------------------------------------------------------------------------
-_MEDIUM_FINDINGS = [
-    {"cwe": 79, "severity": "MEDIUM", "line": 5, "explanation": "XSS risk"}
-]
+_MEDIUM_FINDINGS = [{"cwe": 79, "severity": "MEDIUM", "line": 5, "explanation": "XSS risk"}]
 
 
 class TestApproveFindings:
@@ -232,9 +220,7 @@ class TestApproveFindings:
             assert not (plugin_root / ".scan-pass").exists()
 
             # Now approve
-            result = server.do_approve_findings(
-                reason="false positives on deleted code"
-            )
+            result = server.do_approve_findings(reason="false positives on deleted code")
         finally:
             os.chdir(original_cwd)
 
@@ -261,9 +247,7 @@ class TestApproveFindings:
     def test_empty_reason_fails(self, plugin_root, tmp_path):
         """do_approve_findings with empty reason returns error."""
         _init_git_repo(tmp_path)
-        server._cache_scan(
-            "findings report", _HIGH_FINDINGS, "staged changes", is_staged_scan=True
-        )
+        server._cache_scan("findings report", _HIGH_FINDINGS, "staged changes", is_staged_scan=True)
 
         result = server.do_approve_findings(reason="   ")
         assert "ERROR" in result
@@ -271,9 +255,7 @@ class TestApproveFindings:
 
     def test_only_medium_findings_fails(self):
         """do_approve_findings with only MEDIUM findings returns error."""
-        server._cache_scan(
-            "medium report", _MEDIUM_FINDINGS, "staged changes", is_staged_scan=True
-        )
+        server._cache_scan("medium report", _MEDIUM_FINDINGS, "staged changes", is_staged_scan=True)
         result = server.do_approve_findings(reason="test reason")
         assert "ERROR" in result
         assert "No HIGH/CRITICAL findings" in result

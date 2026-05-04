@@ -188,7 +188,6 @@ def main():
     # Design doc: "Must fail open — plugin bugs should never block the developer."
     # The CI scanner runs fail-closed as the second line of defense.
     try:
-
         tool_input = hook_input.get("tool_input", {})
         if not isinstance(tool_input, dict):
             tool_input = {}

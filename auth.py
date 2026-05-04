@@ -70,12 +70,8 @@ class JWTAuth:
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
-                raise RuntimeError(
-                    "Authentication failed: invalid client_id/client_secret"
-                ) from e
-            raise RuntimeError(
-                f"Authentication failed: HTTP {e.response.status_code}"
-            ) from e
+                raise RuntimeError("Authentication failed: invalid client_id/client_secret") from e
+            raise RuntimeError(f"Authentication failed: HTTP {e.response.status_code}") from e
         except httpx.TimeoutException as e:
             raise RuntimeError("Authentication failed: connection timeout") from e
         except Exception as e:
@@ -84,30 +80,21 @@ class JWTAuth:
         try:
             data = response.json()
         except (json.JSONDecodeError, ValueError) as e:
-            raise RuntimeError(
-                "Authentication failed: invalid response (expected JSON)"
-            ) from e
+            raise RuntimeError("Authentication failed: invalid response (expected JSON)") from e
 
         if "token" not in data:
-            raise RuntimeError(
-                "Authentication failed: unexpected response (missing token)"
-            )
+            raise RuntimeError("Authentication failed: unexpected response (missing token)")
 
         self._token = data["token"]
         try:
             self._expires_at = self._parse_jwt_exp(self._token)
         except (ValueError, KeyError) as e:
             self._token = None
-            raise RuntimeError(
-                f"Authentication failed: invalid JWT payload ({e})"
-            ) from e
+            raise RuntimeError(f"Authentication failed: invalid JWT payload ({e})") from e
         logger.info("JWT token obtained, expires at %.0f", self._expires_at)
 
     def _is_valid(self) -> bool:
-        return (
-            self._token is not None
-            and time.time() < self._expires_at - _REFRESH_BUFFER_SECONDS
-        )
+        return self._token is not None and time.time() < self._expires_at - _REFRESH_BUFFER_SECONDS
 
     def get_header(self) -> str:
         """Return 'Bearer <token>', exchanging/refreshing if needed."""
@@ -177,8 +164,7 @@ def init_auth(api_url: str) -> None:
 
     if not client_id and not client_secret:
         raise RuntimeError(
-            "No auth credentials configured. "
-            "Set ARMIS_CLIENT_ID and ARMIS_CLIENT_SECRET."
+            "No auth credentials configured. Set ARMIS_CLIENT_ID and ARMIS_CLIENT_SECRET."
         )
     if not client_id:
         raise RuntimeError("ARMIS_CLIENT_ID is not set (ARMIS_CLIENT_SECRET is set).")

@@ -8,7 +8,6 @@ security-critical logic via two approaches:
 """
 
 import os
-import re
 import sys
 
 import pytest
@@ -146,9 +145,9 @@ class TestGitRefValidation:
         with open(source_path) as f:
             source = f.read()
         # Find the scan_diff function and check for '--' in the cmd construction
-        assert (
-            '"--"' in source or "'--'" in source
-        ), "server.py must include '--' separator in git diff command"
+        assert '"--"' in source or "'--'" in source, (
+            "server.py must include '--' separator in git diff command"
+        )
 
     def test_git_diff_command_has_no_ext_diff(self):
         """Verify scan_diff includes --no-ext-diff to prevent custom diff driver exploitation."""

@@ -1,0 +1,89 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["hooks*"]
+exclude = ["hooks.tests*"]
+
+[project]
+name = "armis-appsec-mcp"
+version = "0.1.0"
+description = "AI-powered security scanner MCP plugin for Claude Code"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp[cli]>=1.25.0",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=5.0",
+    "ruff>=0.11",
+    "mypy>=1.15",
+]
+
+# ---------------------------------------------------------------------------
+# Ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "S"]
+ignore = [
+    "S101",  # assert used (tests need this)
+    "S603",  # subprocess call with non-constant argument
+    "S607",  # start process with partial path
+    "S301",  # pickle usage
+]
+
+[tool.ruff.lint.per-file-ignores]
+"hooks/tests/*" = ["S", "E402", "B017"]
+"hooks/pre_commit_scan.py" = ["E402"]
+"server.py" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# Mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_configs = true
+warn_redundant_casts = true
+no_implicit_optional = false
+explicit_package_bases = true
+mypy_path = "."
+exclude = ["hooks/tests"]
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["hooks/tests"]
+addopts = "-v --tb=short"
+
+# ---------------------------------------------------------------------------
+# Coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["."]
+omit = [
+    ".venv/*",
+    "hooks/tests/*",
+    "skills/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

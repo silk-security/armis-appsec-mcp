@@ -19,14 +19,20 @@ from scanner_core import format_findings, parse_findings
 # ---------------------------------------------------------------------------
 class TestParseFindings:
     def test_valid_json_block(self):
-        raw = '```json\n[{"cwe": 89, "severity": "HIGH", "line": 10, "explanation": "SQL injection"}]\n```'
+        raw = (
+            '```json\n[{"cwe": 89, "severity": "HIGH",'
+            ' "line": 10, "explanation": "SQL injection"}]\n```'
+        )
         result = parse_findings(raw)
         assert len(result) == 1
         assert result[0]["cwe"] == 89
         assert result[0]["severity"] == "HIGH"
 
     def test_multiple_findings(self):
-        raw = '```json\n[{"cwe": 89, "severity": "HIGH", "line": 10, "explanation": "SQLi"}, {"cwe": 79, "severity": "MEDIUM", "line": 20, "explanation": "XSS"}]\n```'
+        raw = (
+            '```json\n[{"cwe": 89, "severity": "HIGH", "line": 10, "explanation": "SQLi"},'
+            ' {"cwe": 79, "severity": "MEDIUM", "line": 20, "explanation": "XSS"}]\n```'
+        )
         result = parse_findings(raw)
         assert len(result) == 2
 
@@ -46,18 +52,26 @@ class TestParseFindings:
         assert result == []
 
     def test_filters_cwe_zero(self):
-        raw = '```json\n[{"cwe": 0, "severity": "INFO", "line": 1, "explanation": "no issue"}, {"cwe": 89, "severity": "HIGH", "line": 5, "explanation": "real"}]\n```'
+        raw = (
+            '```json\n[{"cwe": 0, "severity": "INFO", "line": 1, "explanation": "no issue"},'
+            ' {"cwe": 89, "severity": "HIGH", "line": 5, "explanation": "real"}]\n```'
+        )
         result = parse_findings(raw)
         assert len(result) == 1
         assert result[0]["cwe"] == 89
 
     def test_filters_cwe_none(self):
-        raw = '```json\n[{"cwe": null, "severity": "INFO", "line": 1, "explanation": "no cwe"}]\n```'
+        raw = (
+            '```json\n[{"cwe": null, "severity": "INFO", "line": 1, "explanation": "no cwe"}]\n```'
+        )
         result = parse_findings(raw)
         assert result == []
 
     def test_surrounding_text(self):
-        raw = 'Here is the analysis:\n\n```json\n[{"cwe": 79, "severity": "HIGH", "line": 3, "explanation": "XSS"}]\n```\n\nPlease fix these issues.'
+        raw = (
+            'Here is the analysis:\n\n```json\n[{"cwe": 79, "severity": "HIGH",'
+            ' "line": 3, "explanation": "XSS"}]\n```\n\nPlease fix these issues.'
+        )
         result = parse_findings(raw)
         assert len(result) == 1
         assert result[0]["cwe"] == 79
@@ -72,9 +86,7 @@ class TestFormatFindings:
         assert result == "SCAN app.py: clean, no findings."
 
     def test_single_finding(self):
-        findings = [
-            {"cwe": 89, "severity": "HIGH", "line": 10, "explanation": "SQL injection"}
-        ]
+        findings = [{"cwe": 89, "severity": "HIGH", "line": 10, "explanation": "SQL injection"}]
         result = format_findings(findings, "app.py")
         assert "SCAN app.py: 1 finding(s)" in result
         assert "HIGH CWE-89 L10: SQL injection" in result
@@ -203,12 +215,8 @@ class TestCallAppsecApiHappyPath:
             mock_response.json.return_value = {"raw_response": "```json\n[]\n```"}
             mock_response.raise_for_status = MagicMock()
 
-            with patch(
-                "scanner_core.get_auth_header", return_value="Bearer test-token"
-            ):
-                with patch(
-                    "scanner_core.httpx.post", return_value=mock_response
-                ) as mock_post:
+            with patch("scanner_core.get_auth_header", return_value="Bearer test-token"):
+                with patch("scanner_core.httpx.post", return_value=mock_response) as mock_post:
                     result = scanner_core.call_appsec_api("print('hello')")
 
             mock_post.assert_called_once()
